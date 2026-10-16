@@ -27,7 +27,7 @@ module.exports = async function handler(req, res) {
   const totalInjuries   = accidents.reduce((s, a) => s + a.injuries, 0);
 
   const accidentList = accidents.map(a =>
-    `เหตุการณ์ที่ ${a.id}: ${a.date} — ${a.location}\nเหตุการณ์: ${a.event}\nผลกระทบ: เสียชีวิต ${a.fatalities} ราย บาดเจ็บ ${a.injuries} ราย`
+    เหตุการณ์ที่ ${a.id}: ${a.date} — ${a.location}\nเหตุการณ์: ${a.event}\nผลกระทบ: เสียชีวิต ${a.fatalities} ราย บาดเจ็บ ${a.injuries} ราย
   ).join('\n\n');
 
   const prompt = `คุณเป็นผู้เชี่ยวชาญด้านความปลอดภัยในอุตสาหกรรม (Safety Engineer) ระดับอาวุโส
@@ -45,31 +45,54 @@ module.exports = async function handler(req, res) {
 ${accidentList}`;
 
   try {
-    const geminiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.4, maxOutputTokens: 1024 }
-        })
-      }
-    );
+    let geminiRes;
+    let retries = 3;
+    let delay = 2000; // เริ่มต้นที่ 2 วินาที
 
-    if (!geminiRes.ok) {
-      const errText = await geminiRes.text();
-      console.error('Gemini API error:', errText);
-      return res.status(502).json({ error: `Gemini API ตอบกลับผิดพลาด: ${geminiRes.status}` });
+    // ระบบ Exponential Backoff จัดการกับ 429 และ 503
+    for (let i = 0; i <= retries; i++) {
+      geminiRes = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { temperature: 0.4, maxOutputTokens: 1024 }
+          })
+        }
+      );
+
+      if (geminiRes.ok) {
+        break; 
+      }
+
+      if (i < retries && (geminiRes.status === 429 || geminiRes.status >= 500)) {
+        await new Promise(resolve => setTimeout(resolve, delay));
+        delay *= 2; 
+      } else {
+        const errText = await geminiRes.text();
+        console.error('Gemini API error:', errText);
+        return res.status(502).json({ error: `Gemini API ตอบกลับผิดพลาด: ${geminiRes.status}`, detail: errText });
+      }
     }
 
     const data = await geminiRes.json();
-    const summary = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    const parts = data?.candidates?.[0]?.content?.parts || [];
+    
+    // ข้ามส่วนที่เป็น "thought" (กระบวนการคิดของโมเดล) เพื่อดึงเฉพาะคำตอบสุดท้าย
+    let summary = '';
+    for (const p of parts) {
+      if (!p.thought && p.text) {
+        summary += p.text;
+      }
+    }
+
     if (!summary) return res.status(502).json({ error: 'ไม่สามารถรับข้อมูลสรุปจาก Gemini ได้' });
 
     return res.status(200).json({ summary });
   } catch (error) {
     console.error('Summarize handler error:', error);
-    return res.status(500).json({ error: `เกิดข้อผิดพลาดในการเชื่อมต่อ: ${error.message}` });
+    return res.status(500).json({ error: เกิดข้อผิดพลาดในการเชื่อมต่อ: ${error.message} });
   }
 }

@@ -62,23 +62,41 @@ Include only confirmed events with a verifiable news source URL. Return [] if no
 
   let newRecords = [];
   try {
-    const geminiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          tools: [{ googleSearch: {} }],
-          generationConfig: { temperature: 0.2, maxOutputTokens: 8192 }
-        })
+    let geminiRes;
+    let retries = 3;
+    let delay = 2000; // Start with a 2-second delay
+
+    for (let i = 0; i <= retries; i++) {
+      geminiRes = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            tools: [{ googleSearch: {} }],
+            generationConfig: { temperature: 0.2, maxOutputTokens: 8192 }
+          })
+        }
+      );
+
+      if (geminiRes.ok) {
+        break; // Success, exit the retry loop
       }
-    );
-    if (!geminiRes.ok) {
-      const txt = await geminiRes.text();
-      return res.status(502).json({ error: `Gemini error ${geminiRes.status}`, detail: txt });
+
+      // If it's a 429 (Too Many Requests) or 50x (Server Error), wait and retry
+      if (i < retries && (geminiRes.status === 429 || geminiRes.status >= 500)) {
+        await new Promise(resolve => setTimeout(resolve, delay));
+        delay *= 2; // Double the delay for exponential backoff (2s, 4s, 8s)
+      } else {
+        // If out of retries or a different error (e.g., 400 Bad Request), fail permanently
+        const txt = await geminiRes.text();
+        return res.status(502).json({ error: `Gemini error ${geminiRes.status}`, detail: txt });
+      }
     }
+
     const geminiData = await geminiRes.json();
+    
     // gemini-2.5-flash outputs thinking parts (thought:true) before the actual answer — skip them
     // Also deduplicate identical parts (grounding sometimes returns the same chunk twice)
     const parts = geminiData?.candidates?.[0]?.content?.parts || [];
@@ -141,7 +159,7 @@ Include only confirmed events with a verifiable news source URL. Return [] if no
   let fileSha = '';
   try {
     const ghRes = await fetch(`${contentsUrl}?ref=${githubBranch}`, { headers: ghHeaders });
-    if (!ghRes.ok) return res.status(502).json({ error: `GitHub fetch failed: ${ghRes.status}` });
+    if (!ghRes.ok) return res.status(502).json({ error: GitHub fetch failed: ${ghRes.status} });
     const ghData = await ghRes.json();
     fileSha = ghData.sha;
     existing = JSON.parse(Buffer.from(ghData.content, 'base64').toString('utf8'));
