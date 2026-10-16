@@ -6,8 +6,16 @@ export default async function handler(req, res) {
 
   // Protect against unauthorized calls
   const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret && req.headers['x-cron-secret'] !== cronSecret) {
-    return res.status(401).json({ error: 'Unauthorized' });
+  // Vercel Cron sends "Authorization: Bearer <CRON_SECRET>"; x-cron-secret is kept for manual calls
+  // Fail closed: a missing secret must never leave the endpoint open (only scripts/update-local.mjs sets LOCAL=1)
+  if (!cronSecret && process.env.LOCAL !== '1') {
+    return res.status(500).json({ error: 'CRON_SECRET not set' });
+  }
+  if (cronSecret) {
+    const bearerOk = req.headers.authorization === `Bearer ${cronSecret}`;
+    if (!bearerOk && req.headers['x-cron-secret'] !== cronSecret) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
   }
 
   const apiKey = process.env.GEMINI_API_KEY;
@@ -133,7 +141,7 @@ Include only confirmed events with a verifiable news source URL. Return [] if no
   let fileSha = '';
   try {
     const ghRes = await fetch(`${contentsUrl}?ref=${githubBranch}`, { headers: ghHeaders });
-    if (!ghRes.ok) return res.status(502).json({ error: `GitHub fetch failed: ${ghRes.status}` });
+    if (!ghRes.ok) return res.status(502).json({ error: GitHub fetch failed: ${ghRes.status} });
     const ghData = await ghRes.json();
     fileSha = ghData.sha;
     existing = JSON.parse(Buffer.from(ghData.content, 'base64').toString('utf8'));
