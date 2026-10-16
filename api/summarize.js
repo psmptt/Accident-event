@@ -27,7 +27,7 @@ module.exports = async function handler(req, res) {
   const totalInjuries   = accidents.reduce((s, a) => s + a.injuries, 0);
 
   const accidentList = accidents.map(a =>
-    เหตุการณ์ที่ ${a.id}: ${a.date} — ${a.location}\nเหตุการณ์: ${a.event}\nผลกระทบ: เสียชีวิต ${a.fatalities} ราย บาดเจ็บ ${a.injuries} ราย
+    `เหตุการณ์ที่ ${a.id}: ${a.date} — ${a.location}\nเหตุการณ์: ${a.event}\nผลกระทบ: เสียชีวิต ${a.fatalities} ราย บาดเจ็บ ${a.injuries} ราย`
   ).join('\n\n');
 
   const prompt = `คุณเป็นผู้เชี่ยวชาญด้านความปลอดภัยในอุตสาหกรรม (Safety Engineer) ระดับอาวุโส
@@ -46,7 +46,7 @@ ${accidentList}`;
 
   try {
     const geminiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-5-flash:generateContent?key=${apiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -60,7 +60,7 @@ ${accidentList}`;
     if (!geminiRes.ok) {
       const errText = await geminiRes.text();
       console.error('Gemini API error:', errText);
-      return res.status(502).json({ error: Gemini API ตอบกลับผิดพลาด: ${geminiRes.status} });
+      return res.status(502).json({ error: `Gemini API ตอบกลับผิดพลาด: ${geminiRes.status}` });
     }
 
     const data = await geminiRes.json();
@@ -70,6 +70,6 @@ ${accidentList}`;
     return res.status(200).json({ summary });
   } catch (error) {
     console.error('Summarize handler error:', error);
-    return res.status(500).json({ error: เกิดข้อผิดพลาดในการเชื่อมต่อ: ${error.message} });
+    return res.status(500).json({ error: `เกิดข้อผิดพลาดในการเชื่อมต่อ: ${error.message}` });
   }
 }

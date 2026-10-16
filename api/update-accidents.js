@@ -141,7 +141,7 @@ Include only confirmed events with a verifiable news source URL. Return [] if no
   let fileSha = '';
   try {
     const ghRes = await fetch(`${contentsUrl}?ref=${githubBranch}`, { headers: ghHeaders });
-    if (!ghRes.ok) return res.status(502).json({ error: GitHub fetch failed: ${ghRes.status} });
+    if (!ghRes.ok) return res.status(502).json({ error: `GitHub fetch failed: ${ghRes.status}` });
     const ghData = await ghRes.json();
     fileSha = ghData.sha;
     existing = JSON.parse(Buffer.from(ghData.content, 'base64').toString('utf8'));
